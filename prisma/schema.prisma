@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   Int                 @id @default(autoincrement())
+  email                String              @unique
+  nome                 String
+  senhaHash            String
+  tipoUsuario          UserType
+  passwordResetToken   String?             @unique
+  passwordResetExpires DateTime?
+  
+ 
+  vagasPublicadas      Vaga[]
+  perfil               Perfil?
+  experiencias         Experiencia[]
+  formacoesAcademicas  FormacaoAcademica[]
+  candidaturas         Candidatura[]
+  perfilEmpresa        PerfilEmpresa?
+  notificacoes         Notificacao[]
+
+ 
+  assinatura           Assinatura?         
+
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+}
+
+enum UserType {
+  CANDIDATO
+  EMPRESA
+}
+
+model Vaga {
+  id                Int                 @id @default(autoincrement())
+  titulo            String
+  descricao         String
+  requisitos        String
+  salario           String?
+  modalidade        ModalidadeVaga
+  localizacao       String
+  
+  
+  isDestaque        Boolean             @default(false)
+  destaqueExpiresAt DateTime?
+
+  empresa           User                @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId         Int
+  candidaturas      Candidatura[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+enum ModalidadeVaga {
+  PRESENCIAL
+  HIBRIDO
+  REMOTO
+}
+
+enum StatusCandidatura {
+  RECEBIDA
+  EM_ANALISE
+  APROVADO_ENTREVISTA
+  REPROVADO
+  CONTRATADO
+}
+
+model Perfil {
+  id           Int     @id @default(autoincrement())
+  resumo       String?
+  telefone     String?
+  linkedin     String?
+  habilidades  String?
+  curriculoUrl String?
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int     @unique
+}
+
+model Experiencia {
+  id          Int      @id @default(autoincrement())
+  cargo       String
+  empresa     String
+  dataInicio  DateTime
+  dataFim     DateTime?
+  descricao   String?
+  candidato   User     @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  candidatoId Int
+}
+
+model FormacaoAcademica {
+  id          Int      @id @default(autoincrement())
+  instituicao String
+  grau        String
+  curso       String
+  dataInicio  DateTime
+  dataFim     DateTime?
+  candidato   User     @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  candidatoId Int
+}
+
+model Candidatura {
+  id          Int               @id @default(autoincrement())
+  status      StatusCandidatura @default(RECEBIDA)
+  anotacoes   String?
+  vaga        Vaga              @relation(fields: [vagaId], references: [id], onDelete: Cascade)
+  vagaId      Int
+  candidato   User              @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  candidatoId Int
+  createdAt   DateTime          @default(now())
+
+  @@unique([vagaId, candidatoId])
+}
+
+model PerfilEmpresa {
+  id        Int     @id @default(autoincrement())
+  cnpj      String  @unique
+  descricao String?
+  website   String?
+  logoUrl   String?
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int     @unique
+}
+
+model Notificacao {
+  id             Int      @id @default(autoincrement())
+  mensagem       String
+  lida           Boolean  @default(false)
+  destinatario   User     @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+  destinatarioId Int
+  createdAt      DateTime @default(now())
+}
+
+
+
+model Plano {
+  id            String    @id 
+  nome          String    
+  preco         Float     
+  limiteVagas   Int       
+  
+  // ID do preço no gateway de pagamento (ex: Stripe)
+  stripePriceId String    @unique
+
+  assinaturas   Assinatura[]
+}
+
+model Assinatura {
+  id            Int       @id @default(autoincrement())
+  status        String    
+  dataFim       DateTime? 
+  
+  // Relação com o User (Empresa)
+  empresa       User      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId     Int       @unique
+
+  // Relação com o Plano
+  plano         Plano     @relation(fields: [planoId], references: [id])
+  planoId       String
+
+  gatewaySubscriptionId String @unique
+  gatewayCustomerId     String @unique
+}
