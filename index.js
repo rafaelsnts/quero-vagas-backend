@@ -39,4 +39,14 @@ app.use("/api/empresas", empresasRoutes);
 app.use("/api/perfis", perfilRoutes);
 app.use("/api/candidaturas", candidaturasRoutes);
 
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(
+    `📊 Database connected: ${process.env.DATABASE_URL ? "Yes" : "No"}`
+  );
+});
+
 export default app;
