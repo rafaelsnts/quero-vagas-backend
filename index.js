@@ -18,7 +18,19 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "https://quero-vagas-frontend.onrender.com",
+      "http://localhost:3000",
+      "http://localhost:5173",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(express.json());
 app.use("/files", express.static(path.join(__dirname, "public")));
 app.use(helmet());
@@ -31,6 +43,14 @@ const limiter = rateLimit({
   message: "Muitas requisições deste IP, tente novamente em 15 minutos.",
 });
 app.use(limiter);
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "API funcionando!",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/vagas", vagasRoutes);
