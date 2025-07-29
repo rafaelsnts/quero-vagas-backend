@@ -49,11 +49,11 @@ const imageFileFilter = (req, file, cb) => {
 export const uploadCurriculo = multer({
   storage: createStorage("curriculos"),
   fileFilter: docFileFilter,
-  limits: { fileSize: 1024 * 1024 * 5 }, // 5MB
+  limits: { fileSize: 1024 * 1024 * 5 },
 });
 
 export const uploadLogo = multer({
   storage: createStorage("logos"),
   fileFilter: imageFileFilter,
-  limits: { fileSize: 1024 * 1024 * 2 }, // 2MB
+  limits: { fileSize: 1024 * 1024 * 2 },
 });

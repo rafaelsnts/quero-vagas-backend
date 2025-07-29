@@ -101,7 +101,33 @@ export const getMinhasVagas = async (req, res) => {
 export const candidatarAVaga = async (req, res) => {
   const candidatoId = req.user.id;
   const vagaId = parseInt(req.params.id);
+
   try {
+    const perfilCandidato = await prisma.user.findUnique({
+      where: { id: candidatoId },
+      include: {
+        perfil: true,
+        experiencias: true,
+        formacoesAcademicas: true,
+      },
+    });
+
+    const perfil = perfilCandidato.perfil;
+
+    const isProfileComplete =
+      perfil &&
+      perfil.resumo &&
+      perfil.curriculoUrl &&
+      perfilCandidato.experiencias.length > 0 &&
+      perfilCandidato.formacoesAcademicas.length > 0;
+
+    if (!isProfileComplete) {
+      return res.status(400).json({
+        message:
+          "Seu perfil está incompleto. Por favor, preencha seu resumo, adicione ao menos uma experiência, uma formação e anexe seu currículo antes de se candidatar.",
+      });
+    }
+
     const candidaturaExistente = await prisma.candidatura.findUnique({
       where: { vagaId_candidatoId: { vagaId, candidatoId } },
     });
@@ -115,6 +141,7 @@ export const candidatarAVaga = async (req, res) => {
     });
     res.status(201).json(novaCandidatura);
   } catch (error) {
+    console.error("Erro ao processar candidatura:", error);
     res.status(500).json({ message: "Erro ao processar sua candidatura." });
   }
 };

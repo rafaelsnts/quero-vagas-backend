@@ -32,7 +32,10 @@ app.use(
 );
 
 app.use(express.json());
+
 app.use("/files", express.static(path.join(__dirname, "public")));
+app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
+
 app.use(helmet());
 
 const limiter = rateLimit({
@@ -67,6 +70,9 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(
     `📊 Database connected: ${process.env.DATABASE_URL ? "Yes" : "No"}`
   );
+
+  console.log(`📁 Static files served from: ${path.join(__dirname, "public")}`);
+  console.log(`🖼️ Images accessible at: http://localhost:${PORT}/uploads/`);
 });
 
 export default app;

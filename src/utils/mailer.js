@@ -3,22 +3,20 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// 1. Cria o "transporter" do Nodemailer usando as credenciais do Gmail
 const transporter = nodemailer.createTransport({
-  service: "gmail", // Usa o serviço do Gmail
+  service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER, // O seu email do ficheiro .env
-    pass: process.env.EMAIL_PASS, // A sua senha de app de 16 dígitos do .env
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
-// Função para enviar o email de redefinição de senha
 export async function sendPasswordResetEmail(userEmail, resetToken) {
   const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
 
   const mailOptions = {
-    from: `"Quero Vagas" <${process.env.EMAIL_USER}>`, // Remetente
-    to: userEmail, // Destinatário
+    from: `"Quero Vagas" <${process.env.EMAIL_USER}>`,
+    to: userEmail,
     subject: "Redefinição de Senha - Quero Vagas",
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
@@ -42,7 +40,6 @@ export async function sendPasswordResetEmail(userEmail, resetToken) {
   };
 
   try {
-    // 2. Usa o transporter para enviar o email
     await transporter.sendMail(mailOptions);
     console.log(`Email de redefinição enviado com sucesso para: ${userEmail}`);
   } catch (error) {

@@ -1,17 +1,28 @@
 import { prisma } from "../database/client.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+
 import { sendPasswordResetEmail } from "../utils/mailer.js";
 import crypto from "crypto";
 
-// --- Funções de Registro e Login (sem alterações) ---
 export const registerCandidate = async (req, res) => {
   const { nome, email, senha } = req.body;
+
   if (!nome || !email || !senha) {
     return res
       .status(400)
       .json({ message: "Todos os campos são obrigatórios." });
   }
+
+  const senhaRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  if (!senhaRegex.test(senha)) {
+    return res.status(400).json({
+      message:
+        "A senha deve ter no mínimo 8 caracteres, incluindo uma letra maiúscula, uma minúscula, um número e um caractere especial (@$!%*?&).",
+    });
+  }
+
   try {
     const userExists = await prisma.user.findUnique({ where: { email } });
     if (userExists) {
@@ -21,44 +32,59 @@ export const registerCandidate = async (req, res) => {
     const newUser = await prisma.user.create({
       data: { nome, email, senhaHash, tipoUsuario: "CANDIDATO" },
     });
-    res
-      .status(201)
-      .json({
-        id: newUser.id,
-        nome: newUser.nome,
-        email: newUser.email,
-        tipoUsuario: newUser.tipoUsuario,
-      });
+    res.status(201).json({
+      id: newUser.id,
+      nome: newUser.nome,
+      email: newUser.email,
+      tipoUsuario: newUser.tipoUsuario,
+    });
   } catch (error) {
+    console.error("Erro ao registrar candidato:", error);
     res.status(500).json({ message: "Ocorreu um erro no servidor." });
   }
 };
 
 export const registerCompany = async (req, res) => {
   const { nomeEmpresa, cnpj, email, senha } = req.body;
+
   if (!nomeEmpresa || !cnpj || !email || !senha) {
     return res
       .status(400)
       .json({ message: "Todos os campos são obrigatórios." });
   }
+
+  const senhaRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  if (!senhaRegex.test(senha)) {
+    return res.status(400).json({
+      message:
+        "A senha deve ter no mínimo 8 caracteres, incluindo uma letra maiúscula, uma minúscula, um número e um caractere especial (@$!%*?&).",
+    });
+  }
+
   try {
     const userExists = await prisma.user.findUnique({ where: { email } });
-    if (userExists) {
-      return res.status(409).json({ message: "Este e-mail já está em uso." });
+    const companyExists = await prisma.perfilEmpresa.findUnique({
+      where: { cnpj },
+    });
+    if (userExists || companyExists) {
+      return res.status(409).json({ message: "Email ou CNPJ já cadastrado." });
     }
     const senhaHash = await bcrypt.hash(senha, 10);
     const newUser = await prisma.user.create({
-      data: { nome: nomeEmpresa, email, senhaHash, tipoUsuario: "EMPRESA" },
+      data: {
+        nome: nomeEmpresa,
+        email,
+        senhaHash,
+        tipoUsuario: "EMPRESA",
+        perfilEmpresa: { create: { cnpj: cnpj } },
+      },
+      include: { perfilEmpresa: true },
     });
-    res
-      .status(201)
-      .json({
-        id: newUser.id,
-        nome: newUser.nome,
-        email: newUser.email,
-        tipoUsuario: newUser.tipoUsuario,
-      });
+    delete newUser.senhaHash;
+    res.status(201).json(newUser);
   } catch (error) {
+    console.error("Erro ao registrar empresa:", error);
     res.status(500).json({ message: "Ocorreu um erro no servidor." });
   }
 };
@@ -82,35 +108,31 @@ export const login = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
-    res
-      .status(200)
-      .json({
-        message: "Login realizado com sucesso!",
-        token,
-        user: {
-          id: user.id,
-          nome: user.nome,
-          email: user.email,
-          tipoUsuario: user.tipoUsuario,
-        },
-      });
+    res.status(200).json({
+      message: "Login realizado com sucesso!",
+      token,
+      user: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        tipoUsuario: user.tipoUsuario,
+      },
+    });
   } catch (error) {
+    console.error("Erro no login:", error);
     res.status(500).json({ message: "Ocorreu um erro no servidor." });
   }
 };
 
-// --- FUNÇÃO "ESQUECI MINHA SENHA" COM TEMPO DE EXPIRAÇÃO CORRIGIDO ---
 export const forgotPassword = async (req, res) => {
   const { email } = req.body;
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return res
-        .status(200)
-        .json({
-          message:
-            "Se o email estiver cadastrado, um link de redefinição será enviado.",
-        });
+      return res.status(200).json({
+        message:
+          "Se o email estiver cadastrado, um link de redefinição será enviado.",
+      });
     }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
@@ -119,8 +141,6 @@ export const forgotPassword = async (req, res) => {
       .update(resetToken)
       .digest("hex");
 
-    // --- AQUI ESTÁ A MUDANÇA ---
-    // Aumentamos o tempo de expiração para 1 hora (60 minutos * 60 segundos * 1000 milissegundos)
     const passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
 
     await prisma.user.update({
@@ -130,24 +150,19 @@ export const forgotPassword = async (req, res) => {
 
     await sendPasswordResetEmail(user.email, resetToken);
 
-    res
-      .status(200)
-      .json({
-        message:
-          "Se o email estiver cadastrado, um link de redefinição será enviado.",
-      });
+    res.status(200).json({
+      message:
+        "Se o email estiver cadastrado, um link de redefinição será enviado.",
+    });
   } catch (error) {
     console.error("Erro no processo de 'esqueci a senha':", error);
-    res
-      .status(200)
-      .json({
-        message:
-          "Se o email estiver cadastrado, um link de redefinição será enviado.",
-      });
+    res.status(200).json({
+      message:
+        "Se o email estiver cadastrado, um link de redefinição será enviado.",
+    });
   }
 };
 
-// --- FUNÇÃO DE REDEFINIR SENHA (sem alterações) ---
 export const resetPassword = async (req, res) => {
   const { token } = req.params;
   const { senha } = req.body;
@@ -160,23 +175,29 @@ export const resetPassword = async (req, res) => {
     .digest("hex");
   try {
     const user = await prisma.user.findFirst({
-      where: { passwordResetToken, passwordResetExpires: { gt: new Date() } },
+      where: {
+        passwordResetToken,
+        passwordResetExpires: { gt: new Date() },
+      },
     });
     if (!user) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Token inválido ou expirado. Por favor, solicite um novo link.",
-        });
+      return res.status(400).json({
+        message:
+          "Token inválido ou expirado. Por favor, solicite um novo link.",
+      });
     }
     const senhaHash = await bcrypt.hash(senha, 10);
     await prisma.user.update({
       where: { id: user.id },
-      data: { senhaHash, passwordResetToken: null, passwordResetExpires: null },
+      data: {
+        senhaHash,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
     });
     res.status(200).json({ message: "Senha redefinida com sucesso!" });
   } catch (error) {
+    console.error("Erro ao redefinir a senha:", error);
     res.status(500).json({ message: "Ocorreu um erro no servidor." });
   }
 };
