@@ -19,6 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
+console.log("DATABASE_URL EM USO PELO SERVIDOR:", process.env.DATABASE_URL);
 const app = express();
 
 const publicDir = path.join(__dirname, "public");
