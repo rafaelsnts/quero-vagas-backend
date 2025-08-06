@@ -51,7 +51,6 @@ export const registerCompany = async (req, res) => {
       .status(400)
       .json({ message: "Todos os campos são obrigatórios." });
   }
-
   const senhaRegex =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
   if (!senhaRegex.test(senha)) {
@@ -62,79 +61,77 @@ export const registerCompany = async (req, res) => {
   }
 
   try {
-    const userExists = await prisma.user.findUnique({ where: { email } });
-    const companyExists = await prisma.perfilEmpresa.findUnique({
-      where: { cnpj },
-    });
-    if (userExists || companyExists) {
-      return res.status(409).json({ message: "Email ou CNPJ já cadastrado." });
-    }
-
-    const senhaHash = await bcrypt.hash(senha, 10);
-    const newUser = await prisma.user.create({
-      data: {
-        nome: nomeEmpresa,
-        email,
-        senhaHash,
-        tipoUsuario: "EMPRESA",
-        perfilEmpresa: { create: { cnpj: cnpj } },
-      },
-      include: { perfilEmpresa: true },
-    });
-
-    const planoBasico = await prisma.plano.findFirst({
-      where: {
-        OR: [{ nome: "Plano Básico" }, { id: "basico" }, { preco: 0 }],
-      },
-    });
-
-    if (planoBasico) {
-      const hoje = new Date();
-      const dataFim = new Date();
-      dataFim.setDate(hoje.getDate() + 30);
-
-      try {
-        await prisma.assinatura.create({
-          data: {
-            empresaId: newUser.perfilEmpresa.id,
-            planoId: planoBasico.id,
-            dataInicio: hoje,
-            dataFim: dataFim,
-            status: "active",
-            gatewaySubscriptionId: `free_${
-              newUser.perfilEmpresa.id
-            }_${Date.now()}`,
-          },
-        });
-      } catch (assinaturaError) {
-        console.error("Erro ao criar assinatura inicial:", assinaturaError);
+    const resultado = await prisma.$transaction(async (tx) => {
+      const userExists = await tx.user.findUnique({ where: { email } });
+      if (userExists) {
+        throw new Error("Email já cadastrado.");
       }
-    } else {
-      console.error(
-        "Plano gratuito não encontrado. A empresa foi criada sem assinatura inicial."
-      );
-    }
+      const companyExists = await tx.perfilEmpresa.findUnique({
+        where: { cnpj },
+      });
+      if (companyExists) {
+        throw new Error("CNPJ já cadastrado.");
+      }
+
+      const senhaHash = await bcrypt.hash(senha, 10);
+
+      const novoUsuario = await tx.user.create({
+        data: {
+          nome: nomeEmpresa,
+          email,
+          senhaHash,
+          tipoUsuario: "EMPRESA",
+        },
+      });
+
+      const novoPerfilEmpresa = await tx.perfilEmpresa.create({
+        data: {
+          cnpj: cnpj,
+          userId: novoUsuario.id,
+        },
+      });
+
+      const planoBasico = await tx.plano.findUnique({
+        where: { id: "basico" },
+      });
+      if (!planoBasico) {
+        throw new Error("Plano Básico não encontrado na base de dados.");
+      }
+
+      await tx.assinatura.create({
+        data: {
+          empresaId: novoPerfilEmpresa.id,
+          planoId: planoBasico.id,
+          status: "active",
+          dataInicio: new Date(),
+        },
+      });
+
+      return novoUsuario;
+    });
 
     const token = jwt.sign(
       {
-        userId: newUser.id,
-        nome: newUser.nome,
-        tipoUsuario: newUser.tipoUsuario,
+        userId: resultado.id,
+        nome: resultado.nome,
+        tipoUsuario: resultado.tipoUsuario,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
-    delete newUser.senhaHash;
+    delete resultado.senhaHash;
 
     res.status(201).json({
-      message:
-        "Empresa registrada com sucesso! Assinatura do plano Básico ativada.",
+      message: "Empresa registrada com sucesso! Plano Básico ativado.",
       token,
-      user: newUser,
+      user: resultado,
     });
   } catch (error) {
     console.error("Erro ao registrar empresa:", error);
+    if (error.message.includes("já cadastrado")) {
+      return res.status(409).json({ message: error.message });
+    }
     res.status(500).json({ message: "Ocorreu um erro no servidor." });
   }
 };
