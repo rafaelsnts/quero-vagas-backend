@@ -41,7 +41,6 @@ export async function sendPasswordResetEmail(userEmail, resetToken) {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Email de redefinição enviado com sucesso para: ${userEmail}`);
   } catch (error) {
     console.error("Erro ao enviar email com Nodemailer:", error);
     throw new Error("Falha ao enviar o email de redefinição.");

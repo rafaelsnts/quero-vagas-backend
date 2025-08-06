@@ -2,7 +2,6 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../database/client.js";
 
 export const protect = async (req, res, next) => {
-  console.log("\n--- MIDDLEWARE PROTECT ACIONADO ---");
   let token;
 
   if (
@@ -29,7 +28,6 @@ export const protect = async (req, res, next) => {
   }
 
   if (!token) {
-    console.log("--> ERRO: Token não encontrado no header.");
     return res
       .status(401)
       .json({ message: "Não autorizado, token não encontrado." });

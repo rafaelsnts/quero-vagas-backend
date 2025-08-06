@@ -1,3 +1,4 @@
+// Datasource e Generator
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,54 +8,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id                   Int                 @id @default(autoincrement())
-  email                String              @unique
-  nome                 String
-  senhaHash            String
-  tipoUsuario          UserType
-  passwordResetToken   String?             @unique
-  passwordResetExpires DateTime?
-  
- 
-  vagasPublicadas      Vaga[]
-  perfil               Perfil?
-  experiencias         Experiencia[]
-  formacoesAcademicas  FormacaoAcademica[]
-  candidaturas         Candidatura[]
-  perfilEmpresa        PerfilEmpresa?
-  notificacoes         Notificacao[]
-
- 
-  assinatura           Assinatura?         
-
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-}
-
+// Enums (Mantidos como no seu original)
 enum UserType {
   CANDIDATO
   EMPRESA
-}
-
-model Vaga {
-  id                Int                 @id @default(autoincrement())
-  titulo            String
-  descricao         String
-  requisitos        String
-  salario           String?
-  modalidade        ModalidadeVaga
-  localizacao       String
-  
-  
-  isDestaque        Boolean             @default(false)
-  destaqueExpiresAt DateTime?
-
-  empresa           User                @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  empresaId         Int
-  candidaturas      Candidatura[]
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
 }
 
 enum ModalidadeVaga {
@@ -71,6 +28,119 @@ enum StatusCandidatura {
   CONTRATADO
 }
 
+// --- MODELOS PRINCIPAIS ---
+
+model User {
+  id                   Int      @id @default(autoincrement())
+  email                String   @unique
+  nome                 String
+  senhaHash            String
+  tipoUsuario          UserType
+  passwordResetToken   String?  @unique
+  passwordResetExpires DateTime?
+
+  // Relações de CANDIDATO
+  perfil               Perfil?
+  experiencias         Experiencia[]
+  formacoesAcademicas  FormacaoAcademica[]
+  candidaturas         Candidatura[]
+  notificacoes         Notificacao[]
+
+  // Relação de EMPRESA (1-para-1)
+  perfilEmpresa        PerfilEmpresa?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model PerfilEmpresa {
+  id        Int      @id @default(autoincrement())
+  cnpj      String   @unique
+  descricao String?
+  website   String?
+  logoUrl   String?
+  
+  // Relação com User (1-para-1)
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // CORREÇÃO ARQUITETURAL: Vagas e Assinatura agora pertencem ao Perfil da Empresa.
+  vagas       Vaga[]
+  assinatura  Assinatura?
+}
+
+
+// --- MODELOS DE PAGAMENTO E PLANOS ---
+
+model Plano {
+  id            String       @id // Ex: "basico", "profissional"
+  nome          String
+  preco         Float
+  limiteVagas   Int
+  stripePriceId String       @unique // ID do preço no Stripe
+
+  assinaturas   Assinatura[]
+}
+
+model Assinatura {
+  id                    Int      @id @default(autoincrement())
+  status                String   // Ex: "active", "canceled", "past_due"
+  dataInicio            DateTime @default(now()) // Adicionado para controle de período
+  dataFim               DateTime?
+
+  // CORREÇÃO ARQUITETURAL: A assinatura está ligada ao PerfilEmpresa.
+  empresaId             Int      @unique
+  empresa               PerfilEmpresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  planoId               String
+  plano                 Plano    @relation(fields: [planoId], references: [id])
+
+  gatewaySubscriptionId String?  @unique
+  gatewayCustomerId     String?
+}
+
+
+// --- MODELOS DE VAGAS E CANDIDATURAS ---
+
+model Vaga {
+  id                 Int              @id @default(autoincrement())
+  titulo             String
+  descricao          String
+  requisitos         String
+  salario            String?
+  modalidade         ModalidadeVaga
+  localizacao        String
+  isDestaque         Boolean          @default(false)
+  destaqueExpiresAt  DateTime?
+
+  // CORREÇÃO ARQUITETURAL: A vaga está ligada ao PerfilEmpresa.
+  empresaId          Int
+  empresa            PerfilEmpresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  
+  candidaturas       Candidatura[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+}
+
+model Candidatura {
+  id          Int               @id @default(autoincrement())
+  status      StatusCandidatura @default(RECEBIDA)
+  anotacoes   String?
+  
+  vagaId      Int
+  vaga        Vaga              @relation(fields: [vagaId], references: [id], onDelete: Cascade)
+  
+  candidatoId Int
+  candidato   User              @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime          @default(now())
+
+  @@unique([vagaId, candidatoId])
+}
+
+
+// --- MODELOS DE PERFIL DO CANDIDATO ---
+
 model Perfil {
   id           Int     @id @default(autoincrement())
   resumo       String?
@@ -78,91 +148,45 @@ model Perfil {
   linkedin     String?
   habilidades  String?
   curriculoUrl String?
-  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   userId       Int     @unique
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Experiencia {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   cargo       String
   empresa     String
   dataInicio  DateTime
   dataFim     DateTime?
   descricao   String?
-  candidato   User     @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  
   candidatoId Int
+  candidato   User      @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
 }
 
 model FormacaoAcademica {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   instituicao String
   grau        String
   curso       String
   dataInicio  DateTime
   dataFim     DateTime?
-  candidato   User     @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  
   candidatoId Int
+  candidato   User      @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
 }
 
-model Candidatura {
-  id          Int               @id @default(autoincrement())
-  status      StatusCandidatura @default(RECEBIDA)
-  anotacoes   String?
-  vaga        Vaga              @relation(fields: [vagaId], references: [id], onDelete: Cascade)
-  vagaId      Int
-  candidato   User              @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
-  candidatoId Int
-  createdAt   DateTime          @default(now())
 
-  @@unique([vagaId, candidatoId])
-}
-
-model PerfilEmpresa {
-  id        Int     @id @default(autoincrement())
-  cnpj      String  @unique
-  descricao String?
-  website   String?
-  logoUrl   String?
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    Int     @unique
-}
+// --- OUTROS MODELOS ---
 
 model Notificacao {
   id             Int      @id @default(autoincrement())
   mensagem       String
   lida           Boolean  @default(false)
-  destinatario   User     @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+  
   destinatarioId Int
+  destinatario   User     @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+  
   createdAt      DateTime @default(now())
-}
-
-
-
-model Plano {
-  id            String    @id 
-  nome          String    
-  preco         Float     
-  limiteVagas   Int       
-  
-  // ID do preço no gateway de pagamento (ex: Stripe)
-  stripePriceId String    @unique
-
-  assinaturas   Assinatura[]
-}
-
-model Assinatura {
-  id            Int       @id @default(autoincrement())
-  status        String    
-  dataFim       DateTime? 
-  
-  // Relação com o User (Empresa)
-  empresa       User      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  empresaId     Int       @unique
-
-  // Relação com o Plano
-  plano         Plano     @relation(fields: [planoId], references: [id])
-  planoId       String
-
-  gatewaySubscriptionId String @unique
-  gatewayCustomerId     String @unique
 }

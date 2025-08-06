@@ -1,12 +1,10 @@
 import { prisma } from "../database/client.js";
 
 export const getMeuPerfilEmpresa = async (req, res) => {
-  console.log("=== BUSCAR PERFIL EMPRESA ===");
-  console.log("User ID:", req.user.id);
-
   try {
-    const empresa = await prisma.user.findUnique({
-      where: { id: req.user.id },
+    const userId = req.user.id;
+    const userProfile = await prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
         nome: true,
@@ -23,11 +21,13 @@ export const getMeuPerfilEmpresa = async (req, res) => {
       },
     });
 
-    console.log("✅ Dados encontrados:", JSON.stringify(empresa, null, 2));
-    console.log("Logo URL no banco:", empresa?.perfilEmpresa?.logoUrl);
-    console.log("=== FIM BUSCAR PERFIL ===");
+    if (!userProfile) {
+      return res
+        .status(404)
+        .json({ message: "Perfil de empresa não encontrado." });
+    }
 
-    res.status(200).json(empresa);
+    res.status(200).json(userProfile);
   } catch (error) {
     console.error("❌ Erro ao buscar perfil da empresa:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -35,22 +35,30 @@ export const getMeuPerfilEmpresa = async (req, res) => {
 };
 
 export const updateMeuPerfilEmpresa = async (req, res) => {
-  const empresaId = req.user.id;
+  const userId = req.user.id;
   const { nome, cnpj, descricao, website } = req.body;
   try {
-    const userAtualizado = await prisma.user.update({
-      where: { id: empresaId },
-      data: { nome },
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { nome },
+      }),
+      prisma.perfilEmpresa.update({
+        where: { userId: userId },
+        data: { cnpj, descricao, website },
+      }),
+    ]);
+
+    const userProfileCompleto = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        perfilEmpresa: true,
+      },
     });
-    const perfilAtualizado = await prisma.perfilEmpresa.upsert({
-      where: { userId: empresaId },
-      update: { cnpj, descricao, website },
-      create: { userId: empresaId, cnpj, descricao, website },
-    });
-    delete userAtualizado.senhaHash;
-    res
-      .status(200)
-      .json({ ...userAtualizado, perfilEmpresa: perfilAtualizado });
+
+    delete userProfileCompleto.senhaHash;
+
+    res.status(200).json(userProfileCompleto);
   } catch (error) {
     console.error("Erro ao atualizar perfil da empresa:", error);
     res.status(500).json({ message: "Erro ao atualizar perfil." });
@@ -58,56 +66,38 @@ export const updateMeuPerfilEmpresa = async (req, res) => {
 };
 
 export const uploadLogoEmpresa = async (req, res) => {
-  console.log("=== INICIO UPLOAD LOGO ===");
-  console.log("User ID:", req.user.id);
-  console.log("Arquivo recebido:", req.file);
-
   const userId = req.user.id;
 
   if (!req.file) {
-    console.log("❌ Nenhum arquivo enviado");
     return res.status(400).json({ message: "Nenhum ficheiro enviado." });
   }
 
   const logoUrl = `/uploads/logos/${req.file.filename}`;
-  console.log("Logo URL gerada:", logoUrl);
 
   try {
     const perfilExistente = await prisma.perfilEmpresa.findUnique({
       where: { userId },
     });
 
-    console.log("Perfil existente:", perfilExistente);
+    if (!perfilExistente) {
+      return res
+        .status(404)
+        .json({ message: "Perfil da empresa não encontrado." });
+    }
 
-    const perfilAtualizado = await prisma.perfilEmpresa.upsert({
+    const perfilAtualizado = await prisma.perfilEmpresa.update({
       where: { userId },
-      update: { logoUrl },
-      create: {
-        userId,
-        logoUrl,
-        cnpj: "",
-        descricao: "",
-        website: "",
-      },
+      data: { logoUrl },
     });
-
-    console.log("✅ Perfil após upsert:", perfilAtualizado);
-
-    const verificacao = await prisma.perfilEmpresa.findUnique({
-      where: { userId },
-    });
-
-    console.log("🔍 Verificação no banco:", verificacao);
-    console.log("=== FIM UPLOAD LOGO ===");
 
     res.status(200).json({
-      message: "Logo atualizada com sucesso!",
+      message: "Logótipo atualizado com sucesso!",
       perfil: perfilAtualizado,
     });
   } catch (error) {
-    console.error("❌ Erro ao fazer upload da logo:", error);
+    console.error("❌ Erro ao fazer upload do logótipo:", error);
     res.status(500).json({
-      message: "Erro interno ao processar o upload da logo.",
+      message: "Erro interno ao processar o upload do logótipo.",
       error: error.message,
     });
   }

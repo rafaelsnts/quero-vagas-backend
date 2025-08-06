@@ -1,10 +1,16 @@
 import multer from "multer";
 import path from "path";
+import fs from "fs";
+
+fs.mkdirSync("public/uploads", { recursive: true });
 
 const createStorage = (folder) => {
+  const destinationPath = `public/uploads/${folder}/`;
+  fs.mkdirSync(destinationPath, { recursive: true });
+
   return multer.diskStorage({
     destination: (req, file, cb) => {
-      cb(null, `public/uploads/${folder}/`);
+      cb(null, destinationPath);
     },
     filename: (req, file, cb) => {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
